@@ -471,7 +471,7 @@ static struct option long_opts[] = {
 static void conf_usage(const char *progname)
 {
 
-	printf("Usage: %s [option] <kconfig-file>\n", progname);
+	printf("Usage: %s [-s] [option] <kconfig-file>\n", progname);
 	printf("[option] is _one_ of the following:\n");
 	printf("  --listnewconfig         List new options\n");
 	printf("  --oldaskconfig          Start a new configuration using a line-oriented program\n");
@@ -488,6 +488,21 @@ static void conf_usage(const char *progname)
 	printf("  --randconfig            New config with random answer to all options\n");
 }
 
+static void conf_check_read(const char *confname, const char *logmsg) {
+	const char *name;
+
+	name = getenv(confname);
+	printf("%s(%s)\n", confname, name);
+	if (name) {
+		if (conf_read_simple(name, S_DEF_USER, false)) {
+			fprintf(stderr, _("***\n"
+				"*** Can't find %s configuration \"%s\"!\n"
+				"***\n"), name, logmsg);
+			exit(1);
+		}
+	}
+}
+
 int main(int ac, char **av)
 {
 	const char *progname = av[0];
@@ -501,7 +516,11 @@ int main(int ac, char **av)
 
 	tty_stdio = isatty(0) && isatty(1) && isatty(2);
 
-	while ((opt = getopt_long(ac, av, "", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(ac, av, "s", long_opts, NULL)) != -1) {
+		if (opt == 's') {
+			conf_set_message_callback(NULL);
+			continue;
+		}
 		input_mode = (enum input_mode)opt;
 		switch (opt) {
 		case silentoldconfig:
@@ -582,6 +601,69 @@ int main(int ac, char **av)
 				"***\n"), defconfig_file);
 			exit(1);
 		}
+
+		conf_check_read("KCONFIG_SELINUX", "selinux");
+		conf_check_read("KCONFIG_LOG_SELINUX", "log selinux");
+		conf_check_read("KCONFIG_TIMA", "tima log");
+		conf_check_read("KCONFIG_DMVERITY", "dmverity");
+		conf_check_read("KCONFIG_VARIANT", "variant");
+		conf_check_read("KCONFIG_DEBUG", "debug");
+		conf_check_read("KCONFIG_KASLR", "kaslr");
+		name = getenv("KCONFIG_SELINUX");
+		printf("KCONFIG_SELINUX(%s)\n", name);
+		if (name) {
+			if (conf_read_simple(name, S_DEF_USER, false)) {
+				printf(_("***\n"
+					"*** Can't find selinux configuration \"%s\"!\n"
+					"***\n"), name);
+				exit(1);
+			}
+		}
+
+		name = getenv("KCONFIG_LOG_SELINUX");
+		printf("KCONFIG_LOG_SELINUX(%s)\n", name);
+		if (name) {
+			if (conf_read_simple(name, S_DEF_USER, false)) {
+				printf(_("***\n"
+					"*** Can't find selinux log configuration \"%s\"!\n"
+					"***\n"), name);
+				exit(1);
+			}
+		}
+
+		name = getenv("KCONFIG_TIMA");
+		printf("KCONFIG_TIMA(%s)\n", name);
+		if (name) {
+			if (conf_read_simple(name, S_DEF_USER, false)) {
+				printf(_("***\n"
+					"*** Can't find tima log configuration \"%s\"!\n"
+					"***\n"), name);
+				exit(1);
+			}
+		}
+
+		name = getenv("KCONFIG_VARIANT");
+		printf("KCONFIG_VARIANT(%s)\n", name);
+		if (name) {
+			if (conf_read_simple(name, S_DEF_USER, false)) {
+				printf(_("***\n"
+					"*** Can't find variant configuration \"%s\"!\n"
+					"***\n"), name);
+				exit(1);
+			}
+		}
+
+		name = getenv("KCONFIG_DEBUG");
+		printf("KCONFIG_DEBUG(%s)\n", name);
+		if (name) {
+			if (conf_read_simple(name, S_DEF_USER, false)) {
+				printf(_("***\n"
+					"*** Can't find debug configuration \"%s\"!\n"
+					"***\n"), name);
+				exit(1);
+			}
+		}
+
 		break;
 	case savedefconfig:
 	case silentoldconfig:
@@ -600,7 +682,7 @@ int main(int ac, char **av)
 		if (!name)
 			break;
 		if ((strcmp(name, "") != 0) && (strcmp(name, "1") != 0)) {
-			if (conf_read_simple(name, S_DEF_USER)) {
+			if (conf_read_simple(name, S_DEF_USER, true)) {
 				fprintf(stderr,
 					_("*** Can't read seed configuration \"%s\"!\n"),
 					name);
@@ -616,8 +698,8 @@ int main(int ac, char **av)
 		case randconfig:	name = "allrandom.config"; break;
 		default: break;
 		}
-		if (conf_read_simple(name, S_DEF_USER) &&
-		    conf_read_simple("all.config", S_DEF_USER)) {
+		if (conf_read_simple(name, S_DEF_USER, true) &&
+		    conf_read_simple("all.config", S_DEF_USER, true)) {
 			fprintf(stderr,
 				_("*** KCONFIG_ALLCONFIG set, but no \"%s\" or \"all.config\" file found\n"),
 				name);

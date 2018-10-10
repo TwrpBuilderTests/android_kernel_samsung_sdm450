@@ -43,6 +43,10 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 unsigned long irq_err_count;
 
 int arch_show_interrupts(struct seq_file *p, int prec)
@@ -65,7 +69,14 @@ int arch_show_interrupts(struct seq_file *p, int prec)
  */
 void handle_IRQ(unsigned int irq, struct pt_regs *regs)
 {
+#ifdef CONFIG_SEC_DEBUG
+	int cpu = smp_processor_id();
+	unsigned long long start_time = cpu_clock(cpu);
+#endif
 	__handle_domain_irq(NULL, irq, false, regs);
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_irq_enterexit_log(irq, start_time);
+#endif
 }
 
 /*
@@ -140,8 +151,6 @@ static bool migrate_one_irq(struct irq_desc *desc)
 {
 	struct irq_data *d = irq_desc_get_irq_data(desc);
 	const struct cpumask *affinity = d->affinity;
-	struct irq_chip *c;
-	bool ret = false;
 
 	/*
 	 * If this is a per-CPU interrupt, or the affinity does not
@@ -150,18 +159,10 @@ static bool migrate_one_irq(struct irq_desc *desc)
 	if (irqd_is_per_cpu(d) || !cpumask_test_cpu(smp_processor_id(), affinity))
 		return false;
 
-	if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids) {
+	if (cpumask_any_and(affinity, cpu_online_mask) >= nr_cpu_ids)
 		affinity = cpu_online_mask;
-		ret = true;
-	}
 
-	c = irq_data_get_irq_chip(d);
-	if (!c->irq_set_affinity)
-		pr_debug("IRQ%u: unable to set affinity\n", d->irq);
-	else if (c->irq_set_affinity(d, affinity, false) == IRQ_SET_MASK_OK && ret)
-		cpumask_copy(d->affinity, affinity);
-
-	return ret;
+	return irq_set_affinity_locked(d, affinity, false) != 0;
 }
 
 /*

@@ -346,8 +346,12 @@ static int hwrng_fillfn(void *unused)
 	long rc;
 
 	while (!kthread_should_stop()) {
-		if (!current_rng)
+		mutex_lock(&rng_mutex);
+		if (!current_rng) {
+			mutex_unlock(&rng_mutex);
 			break;
+		}
+		mutex_unlock(&rng_mutex);
 		rc = rng_get_data(current_rng, rng_fillbuf,
 				  rng_buffer_size(), 1);
 		if (rc <= 0) {
@@ -406,10 +410,12 @@ int hwrng_register(struct hwrng *rng)
 
 	old_rng = current_rng;
 	if (!old_rng) {
-		err = hwrng_init(rng);
-		if (err)
-			goto out_unlock;
 		current_rng = rng;
+		err = hwrng_init(rng);
+		if (err) {
+			current_rng = NULL;
+			goto out_unlock;
+		}
 	}
 	err = 0;
 	if (!old_rng) {

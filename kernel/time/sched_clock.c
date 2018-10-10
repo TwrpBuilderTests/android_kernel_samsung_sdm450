@@ -17,7 +17,9 @@
 #include <linux/sched_clock.h>
 #include <linux/seqlock.h>
 #include <linux/bitops.h>
-
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 struct clock_data {
 	ktime_t wrap_kt;
 	u64 epoch_ns;
@@ -31,6 +33,11 @@ struct clock_data {
 
 static struct hrtimer sched_clock_timer;
 static int irqtime = -1;
+static int initialized;
+static u64 suspend_ns;
+static u64 suspend_cycles;
+static u64 resume_cycles;
+
 
 core_param(irqtime, irqtime, int, 0400);
 
@@ -62,7 +69,9 @@ unsigned long long notrace sched_clock(void)
 	u64 epoch_cyc;
 	u64 cyc;
 	unsigned long seq;
-
+#ifdef CONFIG_SEC_DEBUG
+	u64 local;
+#endif
 	if (cd.suspended)
 		return cd.epoch_ns;
 
@@ -74,6 +83,11 @@ unsigned long long notrace sched_clock(void)
 
 	cyc = read_sched_clock();
 	cyc = (cyc - epoch_cyc) & sched_clock_mask;
+#ifdef CONFIG_SEC_DEBUG
+	local = epoch_ns + cyc_to_ns(cyc, cd.mult, cd.shift);
+	sec_debug_save_last_ns(local);
+	return local;
+#endif
 	return epoch_ns + cyc_to_ns(cyc, cd.mult, cd.shift);
 }
 
@@ -169,6 +183,11 @@ void __init sched_clock_register(u64 (*read)(void), int bits,
 	pr_debug("Registered %pF as sched_clock source\n", read);
 }
 
+int sched_clock_initialized(void)
+{
+	return initialized;
+}
+
 void __init sched_clock_postinit(void)
 {
 	/*
@@ -187,11 +206,18 @@ void __init sched_clock_postinit(void)
 	hrtimer_init(&sched_clock_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	sched_clock_timer.function = sched_clock_poll;
 	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL);
+
+	initialized = 1;
 }
 
 static int sched_clock_suspend(void)
 {
 	update_sched_clock();
+
+	suspend_ns = cd.epoch_ns;
+	suspend_cycles = cd.epoch_cyc;
+	pr_info("suspend ns:%17llu	suspend cycles:%17llu\n",
+				cd.epoch_ns, cd.epoch_cyc);
 	hrtimer_cancel(&sched_clock_timer);
 	cd.suspended = true;
 	return 0;
@@ -200,6 +226,8 @@ static int sched_clock_suspend(void)
 static void sched_clock_resume(void)
 {
 	cd.epoch_cyc = read_sched_clock();
+	resume_cycles = cd.epoch_cyc;
+	pr_info("resume cycles:%17llu\n", cd.epoch_cyc);
 	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL);
 	cd.suspended = false;
 }

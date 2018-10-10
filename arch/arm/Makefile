@@ -298,6 +298,8 @@ ifeq ($(CONFIG_USE_OF),y)
 KBUILD_DTBS := dtbs
 endif
 
+DTSSUBDIR := qcom
+
 all:	$(KBUILD_IMAGE) $(KBUILD_DTBS)
 
 boot := arch/arm/boot
@@ -322,12 +324,29 @@ $(INSTALL_TARGETS):
 %.dtb: | scripts
 	$(Q)$(MAKE) $(build)=$(boot)/dts MACHINE=$(MACHINE) $(boot)/dts/$@
 
-PHONY += dtbs dtbs_install
-dtbs dtbs_install: prepare scripts
-	$(Q)$(MAKE) $(build)=$(boot)/dts MACHINE=$(MACHINE) $@
+dtbs: scripts
+	$(Q)$(MAKE) $(build)=$(boot)/dts MACHINE=$(MACHINE) dtbs
+#	$(foreach DIR, $(DTSSUBDIR), $(Q)$(MAKE) $(build)=$(boot)/dts/$(DIR) MACHINE=$(MACHINE) dtbs)
+ifeq ($(CONFIG_ARCH_SDM450),y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts/samsung/sdm450
+else ifeq ($(CONFIG_SEC_MSM8953_PROJECT),y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts/samsung/msm8953 MACHINE=$(MACHINE) dtbs
+else ifeq ($(CONFIG_SEC_MSM8937_PROJECT),y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts/samsung/msm8937 MACHINE=$(MACHINE) dtbs
+else ifeq ($(CONFIG_SEC_MSM8917_PROJECT),y)
+	$(Q)$(MAKE) $(build)=$(boot)/dts/samsung/msm8917 MACHINE=$(MACHINE) dtbs
+else
+	$(Q)$(MAKE) $(build)=$(boot)/dts/qcom MACHINE=$(MACHINE) dtbs
+endif
 
 zImage-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $(boot)/$@
+
+PHONY += vdso_install
+vdso_install:
+ifeq ($(CONFIG_VDSO),y)
+	$(Q)$(MAKE) $(build)=arch/arm/vdso $@
+endif
 
 PHONY += vdso_install
 vdso_install:

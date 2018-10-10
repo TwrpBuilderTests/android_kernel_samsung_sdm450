@@ -27,6 +27,16 @@ config WAKELOCK
 
 	  Say Y if you are running an android userspace.
 
+config CPU_FREQ_LIMIT_USERSPACE
+	bool "User space cpufreq limit interface"
+	depends on CPU_FREQ_LIMIT
+	default n
+	help
+	  Add sysfs to limit CPU frequency for a userspace program.
+	  /sys/power/cpufreq_min_limit
+	  /sys/power/cpufreq_max_limit
+	  /sys/power/cpufreq_table
+
 config HIBERNATE_CALLBACKS
 	bool
 
@@ -325,3 +335,13 @@ config SUSPEND_TIME
 	  Prints the time spent in suspend in the kernel log, and
 	  keeps statistics on the time spent in suspend in
 	  /sys/kernel/debug/suspend_time
+
+config DEDUCE_WAKEUP_REASONS
+	bool
+	default n
+
+config CPU_FREQ_LIMIT_SCHEDBOOST
+	bool
+	default n
+	help
+	  Sched booster will be active when cpu min limit is set through /sys/power/cpufreq_min_limit

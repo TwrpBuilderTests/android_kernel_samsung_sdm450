@@ -28,6 +28,9 @@
 
 #include "fault.h"
 
+#include <trace/events/exception.h>
+#include <linux/sec_debug.h>
+
 #ifdef CONFIG_MMU
 
 #ifdef CONFIG_KPROBES
@@ -64,9 +67,14 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 		mm = &init_mm;
 
 	printk(KERN_ALERT "pgd = %p\n", mm->pgd);
+	sec_debug_store_pte((unsigned long)mm->pgd, 0);
+
 	pgd = pgd_offset(mm, addr);
 	printk(KERN_ALERT "[%08lx] *pgd=%08llx",
 			addr, (long long)pgd_val(*pgd));
+
+	sec_debug_store_pte((unsigned long)addr, 1);
+	sec_debug_store_pte((unsigned long)pgd_val(*pgd), 2);
 
 	do {
 		pud_t *pud;
@@ -85,6 +93,7 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 		if (PTRS_PER_PUD != 1)
 			printk(", *pud=%08llx", (long long)pud_val(*pud));
 
+		sec_debug_store_pte((unsigned long)pud_val(*pud), 3);
 		if (pud_none(*pud))
 			break;
 
@@ -97,6 +106,7 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 		if (PTRS_PER_PMD != 1)
 			printk(", *pmd=%08llx", (long long)pmd_val(*pmd));
 
+		sec_debug_store_pte((unsigned long)pmd_val(*pmd), 4);
 		if (pmd_none(*pmd))
 			break;
 
@@ -115,6 +125,7 @@ void show_pte(struct mm_struct *mm, unsigned long addr)
 		printk(", *ppte=%08llx",
 		       (long long)pte_val(pte[PTE_HWTABLE_PTRS]));
 #endif
+		sec_debug_store_pte((unsigned long)pte_val(*pte), 5);
 		pte_unmap(pte);
 	} while(0);
 
@@ -163,6 +174,8 @@ __do_user_fault(struct task_struct *tsk, unsigned long addr,
 		struct pt_regs *regs)
 {
 	struct siginfo si;
+
+	trace_user_fault(tsk, addr, fsr);
 
 #ifdef CONFIG_DEBUG_USER
 	if (((user_debug & UDBG_SEGV) && (sig == SIGSEGV)) ||
@@ -554,6 +567,8 @@ do_DataAbort(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (!inf->fn(addr, fsr & ~FSR_LNX_PF, regs))
 		return;
 
+	trace_unhandled_abort(regs, addr, fsr);
+
 	printk(KERN_ALERT "Unhandled fault: %s (0x%03x) at 0x%08lx\n",
 		inf->name, fsr, addr);
 
@@ -585,6 +600,8 @@ do_PrefetchAbort(unsigned long addr, unsigned int ifsr, struct pt_regs *regs)
 
 	if (!inf->fn(addr, ifsr | FSR_LNX_PF, regs))
 		return;
+
+	trace_unhandled_abort(regs, addr, ifsr);
 
 	printk(KERN_ALERT "Unhandled prefetch abort: %s (0x%03x) at 0x%08lx\n",
 		inf->name, ifsr, addr);
